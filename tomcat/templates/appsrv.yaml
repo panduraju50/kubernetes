@@ -1,0 +1,104 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "tomcat.fullname" . }}
+  namespace: cdaf-dev-frontend
+  labels:
+    app: {{ template "tomcat.name" . }}
+    chart: {{ template "tomcat.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "tomcat.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "tomcat.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      volumes:
+        - name: app-volume
+          hostPath: 
+            path: /mnt/app
+            type: DirectoryOrCreate
+#        - name: config-volume
+#          configMap:
+#            name: cdaf
+      initContainers:
+        - name: war
+          image: {{ .Values.image.webarchive.repository }}:{{ .Values.image.webarchive.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "sh"
+            - "-c"
+            - "cp -rf spade-portal-webservice.war spadeadmin.war spade.war  /app"
+          volumeMounts:
+            - name: app-volume
+              mountPath: /app             
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image.tomcat.repository }}:{{ .Values.image.tomcat.tag }}
+          env:
+          - name: my_ip
+            value: "{{ .Values.my_ip }}"
+          - name: my_port
+            value: "{{ .Values.my_port }}"
+          - name: protocol
+            value: "{{ .Values.protocol }}"            
+          - name: welcome_message
+            value: "{{ .Values.welcome_message }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: app-volume
+              mountPath: {{ .Values.deploy.directory }}
+#            - name: config-volume
+#              mountPath: /opt/tomcat/conf/server.xml
+#              subPath: server.xml
+#            - name: config-volume
+#              mountPath: /opt/tomcat/webapps/spade/main.ba17fc92c804724da7af.bundle.js
+#              subPath: main.ba17fc92c804724da7af.bundle.js
+#            - name: config-volume
+#              mountPath: /opt/tomcat/webapps/spadeadmin/main.bundle.js
+#              subPath: main.bundle.js_spadeadmin
+#            - name: config-volume
+#              mountPath: /opt/tomcat/webapps/spade-portal-webservice/WEB-INF/classes/spade-config-dao.properties
+#              subPath: spade-config-dao.properties
+      
+                            
+          ports:
+            - containerPort: {{ .Values.service.internalPort }}
+              hostPort: 8009
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.service.internalPort }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.service.internalPort }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}
+    {{- end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+    {{- end }}
